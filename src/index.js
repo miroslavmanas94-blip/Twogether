@@ -1,4 +1,4 @@
-const HTML = String.raw\`<!doctype html>
+const HTML = String.raw`<!doctype html>
 <html lang="cs">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -32,7 +32,7 @@ async function join(){const c=$("roomCode").value.trim().toUpperCase();if(!/^[A-
 function render(s){latest=s;$("players").innerHTML=s.players.map((p,i)=>'<div class="player '+(s.turn===i?"active":"")+'">'+(p.id===guest?"Ty":"Hráč "+(i+1))+" · "+(p.mark||"čeká")+"</div>").join("");$("gameStatus").textContent=s.winner?(s.winner==="draw"?"Remíza! Zkuste odvetu.":(s.players.find(p=>p.mark===s.winner)?.id===guest?"Vyhrál/a jsi! ♡":"Partner vyhrál! ♡")):s.players.length<2?"Čekáme na druhého hráče…":s.players[s.turn]?.id===guest?"Jsi na tahu!":"Na tahu je partner."; $("board").innerHTML=s.board.map((v,i)=>'<button class="cell" data-i="'+i+'" '+(v||s.winner||s.players.length<2||s.players[s.turn]?.id!==guest?"disabled":"")+'>'+(v==="X"?"×":v==="O"?"○":"")+'</button>').join("");$("board").querySelectorAll("button").forEach(b=>b.onclick=()=>ws?.readyState===1&&ws.send(JSON.stringify({type:"move",index:Number(b.dataset.i)})));}
 async function invite(){const url=location.origin+"/?room="+room;try{await navigator.clipboard.writeText(url);$("gameStatus").textContent="Pozvánka zkopírována! Pošlete ji partnerovi."; }catch{$("gameStatus").textContent="Kód místnosti: "+room;}}
 $("create").onclick=create;$("join").onclick=join;$("share").onclick=invite;$("copyInvite").onclick=invite;$("back").onclick=()=>{ws?.close();location.href="/";};const param=new URLSearchParams(location.search).get("room");if(param){$("roomCode").value=param;join();}
-</script></body></html>\`;
+</script></body></html>`;
 const WIN=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 export class GameRoom {
   constructor(ctx,env){this.ctx=ctx;this.env=env;}
