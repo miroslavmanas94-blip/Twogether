@@ -38,7 +38,7 @@ export class GameRoom {
   constructor(ctx,env){this.ctx=ctx;this.env=env;}
   async fetch(request){
     const url=new URL(request.url);
-    if(url.pathname==="/init"){await this.ctx.storage.put("state",this.ctx.storage.get("state")||{board:Array(9).fill(null),players:[],turn:0,winner:null});return new Response("ok");}
+    if(url.pathname==="/init"){const existing=await this.ctx.storage.get("state");if(!existing)await this.ctx.storage.put("state",{board:Array(9).fill(null),players:[],turn:0,winner:null});return new Response("ok");}
     if(url.pathname!=="/connect"||request.headers.get("Upgrade")!=="websocket")return new Response("Not found",{status:404});
     let state=await this.ctx.storage.get("state")||{board:Array(9).fill(null),players:[],turn:0,winner:null};
     const player=new URL(request.url).searchParams.get("player")||crypto.randomUUID();
