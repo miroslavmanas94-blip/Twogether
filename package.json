@@ -4,7 +4,7 @@
   "private": true,
   "description": "Free two-player browser games for couples",
   "scripts": {
-    "check": "node --check src/index.js"
+    "check": "node --check src/index.js && node -e \"JSON.parse(require(\u0027fs\u0027).readFileSync(\u0027wrangler.jsonc\u0027, \u0027utf8\u0027))\""
   },
   "engines": {
     "node": ">=20"
