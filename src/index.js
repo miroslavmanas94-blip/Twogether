@@ -87,12 +87,16 @@ export default {
   const match=url.pathname.match(/^\/ws\/([A-Z0-9]{6})$/);
   if(match){const stub=env.ROOMS.getByName(match[1]);const target=new URL("https://room/connect");target.search=url.search;return stub.fetch(new Request(target,{headers:request.headers}));}
   const hashRecovery=async(code)=>{const bytes=new TextEncoder().encode(code);const digest=await crypto.subtle.digest("SHA-256",bytes);return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");};
+  const verifyPlayer=async(player,code)=>{if(!player||!code||String(code).length<32)return false;const row=await env.DB.prepare("SELECT player_id FROM player_profiles WHERE player_id=? AND recovery_hash=?").bind(player,await hashRecovery(String(code))).first();return !!row;};
   if(url.pathname==="/api/profile"&&request.method==="POST"){
    let body;try{body=await request.json();}catch{return Response.json({error:"Neplatná data."},{status:400});}
    const playerId=String(body.playerId||"");const displayName=String(body.displayName||"").trim().slice(0,24);const recoveryCode=String(body.recoveryCode||"");
    if(!/^[a-f0-9-]{20,64}$/i.test(playerId)||!displayName||recoveryCode.length<32)return Response.json({error:"Chybí platné údaje profilu."},{status:400});
    const recoveryHash=await hashRecovery(recoveryCode);
-   await env.DB.prepare("INSERT INTO player_profiles(player_id,display_name,recovery_hash) VALUES(?,?,?) ON CONFLICT(player_id) DO UPDATE SET display_name=excluded.display_name,updated_at=datetime('now')").bind(playerId,displayName,recoveryHash).run();
+   const existing=await env.DB.prepare("SELECT recovery_hash FROM player_profiles WHERE player_id=?").bind(playerId).first();
+   if(existing&&existing.recovery_hash!==recoveryHash)return Response.json({error:"Tento profil už existuje. Použijte jeho obnovovací kód."},{status:409});
+   if(existing)await env.DB.prepare("UPDATE player_profiles SET display_name=?,updated_at=datetime('now') WHERE player_id=?").bind(displayName,playerId).run();
+   else await env.DB.prepare("INSERT INTO player_profiles(player_id,display_name,recovery_hash) VALUES(?,?,?)").bind(playerId,displayName,recoveryHash).run();
    return Response.json({ok:true,playerId,displayName});
   }
   if(url.pathname==="/api/recover"&&request.method==="POST"){
@@ -104,19 +108,23 @@ export default {
   }
   if(url.pathname==="/api/friends"&&request.method==="GET"){
    const player=String(url.searchParams.get("player")||"");if(!player)return Response.json({error:"Chybí hráč."},{status:400});
+   if(!await verifyPlayer(player,url.searchParams.get("recoveryCode")))return Response.json({error:"Neplatné přihlášení hráče."},{status:401});
    const rows=await env.DB.prepare("SELECT f.friend_id AS player_id,p.display_name,f.status,f.created_at FROM friendships f LEFT JOIN player_profiles p ON p.player_id=f.friend_id WHERE f.player_id=? UNION ALL SELECT f.player_id AS player_id,p.display_name,f.status,f.created_at FROM friendships f LEFT JOIN player_profiles p ON p.player_id=f.player_id WHERE f.friend_id=? AND f.status='accepted' ORDER BY created_at DESC LIMIT 100").bind(player,player).all();
    return Response.json({friends:rows.results||[]});
   }
   if(url.pathname==="/api/friends"&&request.method==="POST"){
    let body;try{body=await request.json();}catch{return Response.json({error:"Neplatná data."},{status:400});}
    const player=String(body.playerId||""),friend=String(body.friendId||"");if(!player||!friend||player===friend)return Response.json({error:"Neplatné ID hráčů."},{status:400});
+   if(!await verifyPlayer(player,body.recoveryCode))return Response.json({error:"Neplatné přihlášení hráče."},{status:401});
    const target=await env.DB.prepare("SELECT player_id FROM player_profiles WHERE player_id=?").bind(friend).first();if(!target)return Response.json({error:"Hráč nebyl nalezen. Musí si nejdříve vytvořit profil."},{status:404});
    await env.DB.prepare("INSERT INTO friendships(player_id,friend_id,status) VALUES(?,?,'pending') ON CONFLICT(player_id,friend_id) DO NOTHING").bind(player,friend).run();
    return Response.json({ok:true,status:"pending"});
   }
   if(url.pathname==="/api/friends/accept"&&request.method==="POST"){
    let body;try{body=await request.json();}catch{return Response.json({error:"Neplatná data."},{status:400});}
-   const player=String(body.playerId||""),friend=String(body.friendId||"");const result=await env.DB.prepare("UPDATE friendships SET status='accepted' WHERE player_id=? AND friend_id=? AND status='pending'").bind(friend,player).run();
+   const player=String(body.playerId||""),friend=String(body.friendId||"");
+   if(!await verifyPlayer(player,body.recoveryCode))return Response.json({error:"Neplatné přihlášení hráče."},{status:401});
+   const result=await env.DB.prepare("UPDATE friendships SET status='accepted' WHERE player_id=? AND friend_id=? AND status='pending'").bind(friend,player).run();
    return Response.json({ok:(result.meta?.changes||0)>0});
   }
   if(url.pathname==="/api/history"){const player=url.searchParams.get("player");if(!player)return Response.json({error:"Missing player"},{status:400});const rows=await env.DB.prepare("SELECT game_id,result,winner_id,created_at FROM matches WHERE player_one=? OR player_two=? ORDER BY created_at DESC LIMIT 50").bind(player,player).all();return Response.json({matches:rows.results||[]});}
