@@ -38,9 +38,10 @@ export class GameRoom {
   constructor(ctx,env){this.ctx=ctx;this.env=env;}
   async fetch(request){
     const url=new URL(request.url);
-    if(url.pathname==="/init"){const existing=await this.ctx.storage.get("state");if(!existing)await this.ctx.storage.put("state",{board:Array(9).fill(null),players:[],turn:0,winner:null});return new Response("ok");}
+    if(url.pathname==="/init"){const existing=await this.ctx.storage.get("state");if(!existing)await this.ctx.storage.put("state",{roomCode:url.searchParams.get("code")||"",board:Array(9).fill(null),players:[],turn:0,winner:null});return new Response("ok");}
     if(url.pathname!=="/connect"||request.headers.get("Upgrade")!=="websocket")return new Response("Not found",{status:404});
-    let state=await this.ctx.storage.get("state")||{board:Array(9).fill(null),players:[],turn:0,winner:null};
+    let state=await this.ctx.storage.get("state");
+    if(!state)return new Response("Room not found",{status:404});
     const player=new URL(request.url).searchParams.get("player")||crypto.randomUUID();
     let p=state.players.find(x=>x.id===player);
     if(!p){if(state.players.length>=2)return Response.json({error:"Místnost je plná."},{status:409});p={id:player,mark:state.players.length===0?"X":"O",online:true};state.players.push(p);}else{p.online=true;}
@@ -58,7 +59,7 @@ export class GameRoom {
     const won=WIN.some(line=>line.every(i=>state.board[i]===current.mark));
     state.winner=won?current.mark:state.board.every(Boolean)?"draw":null;
     if(!state.winner)state.turn=1-state.turn;
-    else if(!state.matchId){state.matchId=crypto.randomUUID();const winner=state.winner==="draw"?null:state.players.find(p=>p.mark===state.winner)?.id||null;await this.env.DB.prepare("INSERT OR IGNORE INTO matches (match_id,room_code,game_id,player_one,player_two,winner_id,result) VALUES (?,?,?,?,?,?,?)").bind(state.matchId,this.ctx.id.toString(),"tic-tac-toe",state.players[0]?.id||"guest",state.players[1]?.id||"guest",winner,state.winner).run();}
+    else if(!state.matchId){state.matchId=crypto.randomUUID();const winner=state.winner==="draw"?null:state.players.find(p=>p.mark===state.winner)?.id||null;await this.env.DB.prepare("INSERT OR IGNORE INTO matches (match_id,room_code,game_id,player_one,player_two,winner_id,result) VALUES (?,?,?,?,?,?,?)").bind(state.matchId,state.roomCode||this.ctx.id.toString(),"tic-tac-toe",state.players[0]?.id||"guest",state.players[1]?.id||"guest",winner,state.winner).run();}
     await this.ctx.storage.put("state",state);this.broadcast(state);
   }
   async webSocketClose(socket){const a=socket.deserializeAttachment();const state=await this.ctx.storage.get("state");if(!state)return;const p=state.players.find(x=>x.id===a?.player);if(p)p.online=false;await this.ctx.storage.put("state",state);this.broadcast(state);}
@@ -71,7 +72,7 @@ export default {
   if(url.pathname==="/"||url.pathname==="")return new Response(HTML,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
   if(url.pathname==="/api/rooms"&&request.method==="POST"){
    const code=Array.from(crypto.getRandomValues(new Uint8Array(6)),x=>"ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[x%32]).join("");
-   const stub=env.ROOMS.getByName(code);await stub.fetch("https://room/init");
+   const stub=env.ROOMS.getByName(code);await stub.fetch("https://room/init?code="+code);
    return Response.json({code});
   }
   const match=url.pathname.match(/^\/ws\/([A-Z0-9]{6})$/);
