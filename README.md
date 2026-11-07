@@ -24,5 +24,12 @@ A browser-generated guest ID identifies a player without registration. Clearing 
 ## Development
 The first milestone is the game-room foundation: create/join by code or link, reconnect, player presence, synchronized game state, turn validation, and match history. Games are added on top of a shared game interface and rules engine.
 
-## Status
-Initial repository scaffold. Features are not considered complete until tested in two separate browser sessions and deployed successfully.
+## Current milestone
+- Worker deployed as `twogether` on Cloudflare Workers.
+- Private rooms can be created and joined by code or invite link.
+- First playable game: real-time synchronized Tic-tac-toe with server-validated turns and rematches.
+- Room presence, anonymous match history, and an anonymous global wins leaderboard are wired in.
+- The remaining catalogue entries are explicitly marked as planned, not playable yet.
+- Voice calling and a persistent cross-device friends system are not implemented yet.
+
+The first milestone is still in progress. Do not describe TWogether as complete until multiplayer has been tested in two independent browsers/devices and the remaining planned features have been implemented and verified.
