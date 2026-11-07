@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "twogether",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-07",
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "GameRoom" }
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "twogether-game-data",
+      "database_id": "c37e336b-a53e-40e3-b941-c877c5830010"
+    }
+  ],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["GameRoom"] }
+  ]
+}
