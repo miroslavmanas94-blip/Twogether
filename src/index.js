@@ -43,7 +43,7 @@ export class GameRoom {
     let state=await this.ctx.storage.get("state")||{board:Array(9).fill(null),players:[],turn:0,winner:null};
     const player=new URL(request.url).searchParams.get("player")||crypto.randomUUID();
     let p=state.players.find(x=>x.id===player);
-    if(!p){if(state.players.length>=2)return Response.json({error:"Místnost je plná."},{status:409});p={id:player,mark:state.players.length===0?"X":"O"};state.players.push(p);}
+    if(!p){if(state.players.length>=2)return Response.json({error:"Místnost je plná."},{status:409});p={id:player,mark:state.players.length===0?"X":"O",online:true};state.players.push(p);}else{p.online=true;}
     await this.ctx.storage.put("state",state);
     const pair=new WebSocketPair();const [client,server]=Object.values(pair);this.ctx.acceptWebSocket(server);server.serializeAttachment({player});this.broadcast(state);
     return new Response(null,{status:101,webSocket:client});
@@ -58,9 +58,10 @@ export class GameRoom {
     const won=WIN.some(line=>line.every(i=>state.board[i]===current.mark));
     state.winner=won?current.mark:state.board.every(Boolean)?"draw":null;
     if(!state.winner)state.turn=1-state.turn;
+    else if(!state.matchId){state.matchId=crypto.randomUUID();const winner=state.winner==="draw"?null:state.players.find(p=>p.mark===state.winner)?.id||null;await this.env.DB.prepare("INSERT OR IGNORE INTO matches (match_id,room_code,game_id,player_one,player_two,winner_id,result) VALUES (?,?,?,?,?,?,?)").bind(state.matchId,this.ctx.id.toString(),"tic-tac-toe",state.players[0]?.id||"guest",state.players[1]?.id||"guest",winner,state.winner).run();}
     await this.ctx.storage.put("state",state);this.broadcast(state);
   }
-  async webSocketClose(socket){const a=socket.deserializeAttachment();const state=await this.ctx.storage.get("state");if(!state)return;state.players=state.players.filter(p=>p.id!==a?.player);await this.ctx.storage.put("state",state);this.broadcast(state);}
+  async webSocketClose(socket){const a=socket.deserializeAttachment();const state=await this.ctx.storage.get("state");if(!state)return;const p=state.players.find(x=>x.id===a?.player);if(p)p.online=false;await this.ctx.storage.put("state",state);this.broadcast(state);}
   async webSocketError(socket){await this.webSocketClose(socket);}
   broadcast(state){for(const socket of this.ctx.getWebSockets()){try{socket.send(JSON.stringify({type:"state",state}));}catch{}}}
 }
@@ -75,6 +76,8 @@ export default {
   }
   const match=url.pathname.match(/^\/ws\/([A-Z0-9]{6})$/);
   if(match){const stub=env.ROOMS.getByName(match[1]);const target=new URL("https://room/connect");target.search=url.search;return stub.fetch(new Request(target,{headers:request.headers}));}
+  if(url.pathname==="/api/history"){const player=url.searchParams.get("player");if(!player)return Response.json({error:"Missing player"},{status:400});const rows=await env.DB.prepare("SELECT game_id,result,created_at FROM matches WHERE player_one=? OR player_two=? ORDER BY created_at DESC LIMIT 50").bind(player,player).all();return Response.json({matches:rows.results||[]});}
+  if(url.pathname==="/api/leaderboard"){const rows=await env.DB.prepare("SELECT winner_id AS player_id,COUNT(*) AS wins FROM matches WHERE winner_id IS NOT NULL GROUP BY winner_id ORDER BY wins DESC LIMIT 20").all();return Response.json({leaders:rows.results||[]});}
   return new Response("Not found",{status:404});
  }
 };
